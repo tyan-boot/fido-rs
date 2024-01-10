@@ -176,7 +176,7 @@ fn download_src() -> Result<()> {
         let gz = flate2::read::GzDecoder::new(Cursor::new(content));
         let mut tar = tar::Archive::new(gz);
 
-        tar.unpack(out_dir.join("libfido2"))?;
+        tar.unpack(dst)?;
 
         Ok(())
     }
@@ -214,7 +214,7 @@ fn download_src() -> Result<()> {
         bail!("verify download {} failed", filename);
     }
 
-    extract_tar(&archive, out_dir.join("libfido2"))?;
+    extract_tar(&archive_bin, out_dir.join("libfido2"))?;
 
     Ok(())
 }
