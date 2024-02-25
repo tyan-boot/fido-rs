@@ -84,13 +84,13 @@ impl Credential {
 
     /// Return user name, or [None] if is not set.
     pub fn user_name(&self) -> Option<&str> {
-        let user_name = unsafe { ffi::fido_cred_rp_id(self.0.as_ptr()) };
+        let user_name = unsafe { ffi::fido_cred_user_name(self.0.as_ptr()) };
         str_or_none!(user_name)
     }
 
     /// Return user display name, or [None] if is not set.
     pub fn display_name(&self) -> Option<&str> {
-        let display_name = unsafe { ffi::fido_cred_rp_id(self.0.as_ptr()) };
+        let display_name = unsafe { ffi::fido_cred_display_name(self.0.as_ptr()) };
         str_or_none!(display_name)
     }
 
@@ -303,6 +303,15 @@ impl Credential {
         Ok(())
     }
 
+    pub fn exclude_cred_id(&mut self, id: impl AsRef<[u8]>) -> Result<()> {
+        let id = id.as_ref();
+        unsafe {
+            check(ffi::fido_cred_exclude(self.0.as_ptr(), id.as_ptr(), id.len()))?;
+        }
+
+        Ok(())
+    }
+
     /// Sets the user attributes of cred.
     ///
     /// Previously set user attributes are flushed
@@ -417,7 +426,7 @@ impl Credential {
     /// Note that not all authenticators support FIDO2 and therefore may only be able to generate fido-u2f attestation statements.
     pub fn set_attestation_format(&mut self, fmt: AttestationFormat) -> Result<()> {
         let fmt = match fmt {
-            AttestationFormat::Packed => CString::new("packet"),
+            AttestationFormat::Packed => CString::new("packed"),
             AttestationFormat::FidoU2f => CString::new("fido-u2f"),
             AttestationFormat::Tpm => CString::new("tpm"),
             AttestationFormat::None => CString::new("none"),
