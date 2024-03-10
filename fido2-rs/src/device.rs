@@ -254,6 +254,28 @@ impl Device {
         Ok(info)
     }
 
+    pub fn get_retry_count(&self) -> Result<i32> {
+        let mut res = 0;
+        unsafe {
+            check(ffi::fido_dev_get_retry_count(
+                self.ptr.as_ptr(),
+                &mut res as *mut i32,
+            ))?;
+        }
+        Ok(res)
+    }
+
+    pub fn get_uv_retry_count(&self) -> Result<i32> {
+        let mut res = 0;
+        unsafe {
+            check(ffi::fido_dev_get_uv_retry_count(
+                self.ptr.as_ptr(),
+                &mut res as *mut i32,
+            ))?;
+        }
+        Ok(res)
+    }
+
     /// Generates a new credential on a FIDO2 device.
     ///
     /// Ask the FIDO2 device represented by dev to generate a new credential according to the following parameters defined in cred:
