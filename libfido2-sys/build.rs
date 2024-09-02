@@ -13,7 +13,7 @@ extern crate ureq;
 #[cfg(not(target_env = "msvc"))]
 extern crate pkg_config;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use cfg_if::cfg_if;
 use sha2::{Digest, Sha256};
 use std::env;
