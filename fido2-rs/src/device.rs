@@ -388,6 +388,7 @@ impl Drop for Device {
 
 bitflags! {
     /// CTAPHID capabilities
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
     pub struct CTAPHIDFlags: u8 {
         const WINK = ffi::FIDO_CAP_WINK as u8;
         const CBOR = ffi::FIDO_CAP_CBOR as u8;

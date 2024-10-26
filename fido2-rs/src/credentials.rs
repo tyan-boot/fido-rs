@@ -363,7 +363,7 @@ impl Credential {
     /// See [Extensions]
     pub fn set_extension(&mut self, flags: Extensions) -> Result<()> {
         unsafe {
-            check(ffi::fido_cred_set_extensions(self.0.as_ptr(), flags.bits))?;
+            check(ffi::fido_cred_set_extensions(self.0.as_ptr(), flags.bits()))?;
         }
 
         Ok(())
