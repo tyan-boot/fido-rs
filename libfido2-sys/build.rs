@@ -13,7 +13,7 @@ extern crate ureq;
 #[cfg(not(target_env = "msvc"))]
 extern crate pkg_config;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use cfg_if::cfg_if;
 use sha2::{Digest, Sha256};
 use std::env;
@@ -79,6 +79,8 @@ fn main() -> Result<()> {
         } else {
             // mingw, linux, and other.
             println!("cargo:rustc-link-lib=cbor");
+            println!("cargo:rustc-link-lib=udev");
+            println!("cargo:rustc-link-lib=pcsclite");
             println!("cargo:rustc-link-lib=z");
             println!("cargo:rustc-link-lib=crypto");
         }
@@ -233,6 +235,8 @@ fn build_lib() -> Result<PathBuf> {
     .define("BUILD_MANPAGES", "off")
     .define("BUILD_EXAMPLES", "off")
     .define("BUILD_TOOLS", "off")
+    .define("NFC_LINUX", "on")
+    .define("USE_PCSC", "on")
     .build();
 
     Ok(path.join("lib"))

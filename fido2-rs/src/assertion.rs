@@ -143,6 +143,18 @@ impl AssertRequest {
             })
         }
     }
+
+    pub fn set_hmac_salt(&mut self, salt: &[u8]) -> Result<()> {
+        unsafe {
+            check(ffi::fido_assert_set_hmac_salt(
+                self.0.ptr.as_ptr(),
+                salt.as_ptr(),
+                salt.len()
+            ))?;
+        }
+
+        Ok(())
+    }
 }
 
 /// helper for verify an exist single assertion
