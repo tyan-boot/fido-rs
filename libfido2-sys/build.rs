@@ -1,11 +1,11 @@
-const VERSION: &str = "1.12.0";
+const VERSION: &str = "1.15.0";
 const BASE_URL: &str = "https://developers.yubico.com/libfido2/Releases";
 
 #[cfg(all(windows, target_env = "msvc"))]
-const SHA256: &str = "7e3a6cfe81755ab208b7bb33501deb9f40ec9657fc89b5e601bcee95b0efa23d";
+const SHA256: &str = "30f58bff7767983be40084bea5c75a8ef008a42794721ca75d1b73cc5685698c";
 
 #[cfg(not(all(windows, target_env = "msvc")))]
-const SHA256: &str = "813d6d25116143d16d2e96791718a74825da16b774a8d093d96f06ae1730d9c5";
+const SHA256: &str = "abaab1318d21d262ece416fb8a7132fa9374bda89f6fa52b86a98a2f5712b61e";
 
 #[cfg(target_env = "msvc")]
 extern crate ureq;
@@ -13,7 +13,7 @@ extern crate ureq;
 #[cfg(not(target_env = "msvc"))]
 extern crate pkg_config;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use cfg_if::cfg_if;
 use sha2::{Digest, Sha256};
 use std::env;
@@ -189,14 +189,14 @@ fn download_src() -> Result<()> {
     let out_path = out_dir.join(&filename);
 
     if out_path.exists() {
-        let archive = std::fs::read(&out_path).expect("read exist archive failed");
+        let archive = std::fs::read(&out_path).context("read exist archive failed")?;
 
         if verify_sha256(&archive) {
             extract_tar(&archive, out_dir.join("libfido2"))?;
 
             return Ok(());
         } else {
-            std::fs::remove_file(&out_path).expect("unable delete old file");
+            std::fs::remove_file(&out_path).context("unable delete old file")?;
         }
     }
 
@@ -204,13 +204,13 @@ fn download_src() -> Result<()> {
 
     let response = ureq::get(&format!("{}/{}", BASE_URL, filename))
         .call()
-        .expect("unable download fido2 release");
+        .context("unable download fido2 release")?;
     response
         .into_reader()
         .read_to_end(&mut archive_bin)
-        .expect("read stream failed");
+        .context("read stream failed")?;
 
-    std::fs::write(out_path, &archive_bin).expect("write file failed");
+    std::fs::write(out_path, &archive_bin).context("write file failed")?;
 
     if !verify_sha256(&archive_bin) {
         bail!("verify download {} failed", filename);

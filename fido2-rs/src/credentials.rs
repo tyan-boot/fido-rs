@@ -306,7 +306,11 @@ impl Credential {
     pub fn exclude_cred_id(&mut self, id: impl AsRef<[u8]>) -> Result<()> {
         let id = id.as_ref();
         unsafe {
-            check(ffi::fido_cred_exclude(self.0.as_ptr(), id.as_ptr(), id.len()))?;
+            check(ffi::fido_cred_exclude(
+                self.0.as_ptr(),
+                id.as_ptr(),
+                id.len(),
+            ))?;
         }
 
         Ok(())

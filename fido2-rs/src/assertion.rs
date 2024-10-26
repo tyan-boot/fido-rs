@@ -149,7 +149,7 @@ impl AssertRequest {
             check(ffi::fido_assert_set_hmac_salt(
                 self.0.ptr.as_ptr(),
                 salt.as_ptr(),
-                salt.len()
+                salt.len(),
             ))?;
         }
 
