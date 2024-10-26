@@ -15,7 +15,7 @@ jobs:
           - beta
           - nightly
     steps:
-      - run: sudo apt-get update && sudo apt-get install libfido2-dev libcbor-dev libudev-dev pkg-config cmake -y
+      - run: sudo apt-get update && sudo apt-get install libfido2-dev libcbor-dev libudev-dev libpcsclite-dev pkg-config cmake -y
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
