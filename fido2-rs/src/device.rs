@@ -1,7 +1,8 @@
 use crate::assertion::{AssertRequest, Assertions};
 use crate::cbor::CBORInfo;
 use crate::credentials::Credential;
-use crate::error::Result;
+use crate::credman::CredentialManagement;
+use crate::error::{Error, Result};
 use crate::utils::check;
 use bitflags::bitflags;
 use ffi::fido_dev_t;
@@ -133,7 +134,7 @@ impl DeviceCancel {
 
 /// A fido device.
 pub struct Device {
-    ptr: NonNull<fido_dev_t>,
+    pub(crate) ptr: NonNull<fido_dev_t>,
 }
 
 impl Device {
@@ -374,6 +375,31 @@ impl Device {
         }
 
         Ok(request.0)
+    }
+
+    /// Obtain a handle to the credential management interface of a FIDO2 device.
+    ///
+    /// A valid pin must be provided. If the device does not support credential management,
+    /// or an error happened, error will be returned.
+    pub fn credman(&self, pin: &str) -> Result<CredentialManagement> {
+        if !self.supports_credman() {
+            return Err(Error::Unsupported);
+        }
+
+        let credman = CredentialManagement::new(&self);
+
+        let pin = CString::new(pin)?;
+        let pin_ptr = pin.as_ptr();
+
+        unsafe {
+            check(ffi::fido_credman_get_dev_metadata(
+                self.ptr.as_ptr(),
+                credman.ptr.as_ptr(),
+                pin_ptr,
+            ))?;
+        }
+
+        Ok(credman)
     }
 }
 

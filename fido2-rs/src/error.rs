@@ -14,6 +14,9 @@ pub enum Error {
 
     #[error("openssl {0}")]
     Openssl(#[from] openssl::error::ErrorStack),
+
+    #[error("unsupported")]
+    Unsupported,
 }
 
 /// Error from libfido2

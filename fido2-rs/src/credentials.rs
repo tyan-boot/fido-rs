@@ -1,8 +1,12 @@
+use std::ffi::{CStr, CString};
+use std::ops::Deref;
+use std::ptr::NonNull;
+
+use bitflags::bitflags;
+use foreign_types::{ForeignType, ForeignTypeRef, Opaque};
+
 use crate::error::Result;
 use crate::utils::check;
-use bitflags::bitflags;
-use std::ffi::{CStr, CString};
-use std::ptr::NonNull;
 
 /// FIDO credential
 pub struct Credential(pub(crate) NonNull<ffi::fido_cred_t>);
@@ -16,22 +20,33 @@ impl Drop for Credential {
     }
 }
 
-impl Credential {
-    /// Create a new credential
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        unsafe {
-            let cred = ffi::fido_cred_new();
+impl ForeignType for Credential {
+    type CType = ffi::fido_cred_t;
+    type Ref = CredentialRef;
 
-            Credential(NonNull::new_unchecked(cred))
-        }
+    unsafe fn from_ptr(ptr: *mut Self::CType) -> Self {
+        Credential(NonNull::new_unchecked(ptr))
     }
+
+    fn as_ptr(&self) -> *mut Self::CType {
+        self.0.as_ptr()
+    }
+}
+
+/// FIDO credential
+pub struct CredentialRef(Opaque);
+
+impl ForeignTypeRef for CredentialRef {
+    type CType = ffi::fido_cred_t;
+}
+
+impl CredentialRef {
     /// If the CTAP 2.1 FIDO_EXT_MINPINLEN extension is enabled on cred, then this function returns
     /// the minimum PIN length of cred.
     ///
     /// Otherwise, returns zero.
     pub fn pin_min_len(&self) -> usize {
-        unsafe { ffi::fido_cred_pin_minlen(self.0.as_ptr()) }
+        unsafe { ffi::fido_cred_pin_minlen(self.as_ptr()) }
     }
 
     /// If the CTAP 2.1 FIDO_EXT_CRED_PROTECT extension is enabled on cred, then this function returns
@@ -40,7 +55,7 @@ impl Credential {
     /// Otherwise, returns [None]
     pub fn protection(&self) -> Option<Protection> {
         unsafe {
-            let prot = ffi::fido_cred_prot(self.0.as_ptr());
+            let prot = ffi::fido_cred_prot(self.as_ptr());
 
             match prot {
                 ffi::FIDO_CRED_PROT_UV_OPTIONAL => Some(Protection::UvOptional),
@@ -53,7 +68,7 @@ impl Credential {
 
     /// Return the attestation statement format identifier of cred, or [None] if cred does not have a format set.
     pub fn attestation_format(&self) -> Option<AttestationFormat> {
-        let fmt = unsafe { ffi::fido_cred_fmt(self.0.as_ptr()) };
+        let fmt = unsafe { ffi::fido_cred_fmt(self.as_ptr()) };
 
         if fmt.is_null() {
             None
@@ -61,7 +76,7 @@ impl Credential {
             let fmt = unsafe { CStr::from_ptr(fmt).to_str().expect("invalid utf8") };
 
             match fmt {
-                "packet" => Some(AttestationFormat::Packed),
+                "packed" => Some(AttestationFormat::Packed),
                 "fido-u2f" => Some(AttestationFormat::FidoU2f),
                 "tpm" => Some(AttestationFormat::Tpm),
                 "none" => Some(AttestationFormat::None),
@@ -72,25 +87,25 @@ impl Credential {
 
     /// Return relying party ID, or [None] if is not set.
     pub fn rp_id(&self) -> Option<&str> {
-        let rp_id = unsafe { ffi::fido_cred_rp_id(self.0.as_ptr()) };
+        let rp_id = unsafe { ffi::fido_cred_rp_id(self.as_ptr()) };
         str_or_none!(rp_id)
     }
 
     /// Return relying party name, or [None] if is not set.
     pub fn rp_name(&self) -> Option<&str> {
-        let rp_name = unsafe { ffi::fido_cred_rp_name(self.0.as_ptr()) };
+        let rp_name = unsafe { ffi::fido_cred_rp_name(self.as_ptr()) };
         str_or_none!(rp_name)
     }
 
     /// Return user name, or [None] if is not set.
     pub fn user_name(&self) -> Option<&str> {
-        let user_name = unsafe { ffi::fido_cred_user_name(self.0.as_ptr()) };
+        let user_name = unsafe { ffi::fido_cred_user_name(self.as_ptr()) };
         str_or_none!(user_name)
     }
 
     /// Return user display name, or [None] if is not set.
     pub fn display_name(&self) -> Option<&str> {
-        let display_name = unsafe { ffi::fido_cred_display_name(self.0.as_ptr()) };
+        let display_name = unsafe { ffi::fido_cred_display_name(self.as_ptr()) };
         str_or_none!(display_name)
     }
 
@@ -98,8 +113,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn auth_data(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_authdata_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_authdata_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_authdata_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_authdata_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -108,8 +123,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn auth_data_raw(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_authdata_raw_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_authdata_raw_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_authdata_raw_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_authdata_raw_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -118,8 +133,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn client_data_hash(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_clientdata_hash_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_clientdata_hash_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_clientdata_hash_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_clientdata_hash_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -128,8 +143,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn id(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_id_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_id_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_id_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_id_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -138,8 +153,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn attestation_guid(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_aaguid_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_aaguid_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_aaguid_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_aaguid_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -148,8 +163,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn large_blob_key(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_largeblob_key_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_largeblob_key_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_largeblob_key_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_largeblob_key_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -158,8 +173,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn public_key(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_pubkey_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_pubkey_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_pubkey_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_pubkey_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -168,8 +183,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn signature(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_sig_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_sig_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_sig_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_sig_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -178,8 +193,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn user_id(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_user_id_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_user_id_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_user_id_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_user_id_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -188,8 +203,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn certificate(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_x5c_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_x5c_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_x5c_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_x5c_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -198,8 +213,8 @@ impl Credential {
     ///
     /// The slice len will be 0 if is not set.
     pub fn attestation(&self) -> &[u8] {
-        let len = unsafe { ffi::fido_cred_attstmt_len(self.0.as_ptr()) };
-        let ptr = unsafe { ffi::fido_cred_attstmt_ptr(self.0.as_ptr()) };
+        let len = unsafe { ffi::fido_cred_attstmt_len(self.as_ptr()) };
+        let ptr = unsafe { ffi::fido_cred_attstmt_ptr(self.as_ptr()) };
 
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
@@ -207,7 +222,7 @@ impl Credential {
     /// Return the COSE algorithm of cred.
     pub fn cose_type(&self) -> CoseType {
         unsafe {
-            let cred_type = ffi::fido_cred_type(self.0.as_ptr());
+            let cred_type = ffi::fido_cred_type(self.as_ptr());
 
             CoseType::try_from(cred_type).unwrap_or(CoseType::UNSPEC)
         }
@@ -215,12 +230,12 @@ impl Credential {
 
     /// Return the authenticator data flags of cred.
     pub fn flags(&self) -> u8 {
-        unsafe { ffi::fido_cred_flags(self.0.as_ptr()) }
+        unsafe { ffi::fido_cred_flags(self.as_ptr()) }
     }
 
     /// Return the authenticator data signature counter of cred.
     pub fn counter(&self) -> u32 {
-        unsafe { ffi::fido_cred_sigcount(self.0.as_ptr()) }
+        unsafe { ffi::fido_cred_sigcount(self.as_ptr()) }
     }
 
     /// Verifies whether the client data hash, relying party ID, credential ID, type, protection policy,
@@ -234,7 +249,7 @@ impl Credential {
     /// The attestation type implemented by [Credential::verify] is Basic Attestation.
     pub fn verify(&self) -> Result<()> {
         unsafe {
-            check(ffi::fido_cred_verify(self.0.as_ptr()))?;
+            check(ffi::fido_cred_verify(self.as_ptr()))?;
         }
 
         Ok(())
@@ -249,7 +264,33 @@ impl Credential {
     /// The attestation type implemented by [Credential::verify_self] is Self Attestation.
     pub fn verify_self(&self) -> Result<()> {
         unsafe {
-            check(ffi::fido_cred_verify_self(self.0.as_ptr()))?;
+            check(ffi::fido_cred_verify_self(self.as_ptr()))?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Credential {
+    /// Create a new credential
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        unsafe {
+            let cred = ffi::fido_cred_new();
+
+            Credential(NonNull::new_unchecked(cred))
+        }
+    }
+
+    /// Set the id
+    pub fn set_id(&mut self, id: impl AsRef<[u8]>) -> Result<()> {
+        let id = id.as_ref();
+        unsafe {
+            check(ffi::fido_cred_set_id(
+                self.0.as_ptr(),
+                id.as_ptr(),
+                id.len(),
+            ))?;
         }
 
         Ok(())
@@ -259,7 +300,7 @@ impl Credential {
     ///
     /// This is required by Windows Hello, which calculates the client data hash internally.
     ///
-    /// For compatibility with Windows Hello, applications should use [CredentialRequestBuilder::client_data] instead of [CredentialRequestBuilder::client_data_hash]
+    /// For compatibility with Windows Hello, applications should use [Credential::set_client_data] instead of [Credential::set_client_data_hash]
     pub fn set_client_data(&mut self, data: impl AsRef<[u8]>) -> Result<()> {
         let data = data.as_ref();
         unsafe {
@@ -273,7 +314,7 @@ impl Credential {
         Ok(())
     }
 
-    /// See [CredentialRequestBuilder::client_data]
+    /// See [Credential::set_client_data]
     pub fn set_client_data_hash(&mut self, data: impl AsRef<[u8]>) -> Result<()> {
         let data = data.as_ref();
         unsafe {
@@ -455,6 +496,20 @@ impl Credential {
         }
 
         Ok(())
+    }
+}
+
+impl AsRef<CredentialRef> for Credential {
+    fn as_ref(&self) -> &CredentialRef {
+        unsafe { CredentialRef::from_ptr(self.0.as_ptr()) }
+    }
+}
+
+impl Deref for Credential {
+    type Target = CredentialRef;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { CredentialRef::from_ptr(self.0.as_ptr()) }
     }
 }
 

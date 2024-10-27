@@ -74,6 +74,7 @@ mod utils;
 pub mod assertion;
 mod cbor;
 pub mod credentials;
+pub mod credman;
 pub mod device;
 pub mod error;
 mod key;
