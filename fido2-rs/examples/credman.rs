@@ -20,9 +20,9 @@ fn main() -> Result<()> {
         let credman = dev.credman(PIN)?;
         println!("  cred count: {}", credman.count());
 
-        for rp in credman.get_rp(PIN)? {
+        for rp in credman.get_rp()? {
             println!("  rp: {:?}", rp);
-            let rk = credman.get_rk(rp.id, PIN)?;
+            let rk = credman.get_rk(rp.id)?;
 
             for idx in 0..rk.count() {
                 let rk = &rk[idx];
