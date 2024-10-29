@@ -9,6 +9,7 @@ use ffi::fido_dev_t;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::ptr::NonNull;
+use zeroize::Zeroizing;
 
 /// Device list.
 ///
@@ -381,12 +382,14 @@ impl Device {
     ///
     /// A valid pin must be provided. If the device does not support credential management,
     /// or an error happened, error will be returned.
+    ///
+    /// **Pin will be kept in memory and zeroized securely when the returned CredentialManagement is dropped.**
     pub fn credman(&self, pin: &str) -> Result<CredentialManagement> {
         if !self.supports_credman() {
             return Err(Error::Unsupported);
         }
 
-        let credman = CredentialManagement::new(&self);
+        let ptr = unsafe { ffi::fido_credman_metadata_new() };
 
         let pin = CString::new(pin)?;
         let pin_ptr = pin.as_ptr();
@@ -394,10 +397,13 @@ impl Device {
         unsafe {
             check(ffi::fido_credman_get_dev_metadata(
                 self.ptr.as_ptr(),
-                credman.ptr.as_ptr(),
+                ptr,
                 pin_ptr,
             ))?;
         }
+
+        let ptr = unsafe { NonNull::new_unchecked(ptr) };
+        let credman = CredentialManagement::new(ptr, &self, Zeroizing::new(pin));
 
         Ok(credman)
     }

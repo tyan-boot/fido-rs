@@ -15,6 +15,7 @@ bitflags = "2.6.0"
 libfido2-sys = { version = "0.3.0", path = "../libfido2-sys" }
 openssl = "0.10.68"
 foreign-types = "=0.3.1"
+zeroize = "1.8.1"
 
 [dev-dependencies]
 anyhow = "1.0.91"

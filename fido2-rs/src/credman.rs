@@ -1,10 +1,11 @@
 use std::borrow::Cow;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::ops::Index;
 use std::ptr::NonNull;
 
 use foreign_types::{ForeignType, ForeignTypeRef};
+use zeroize::Zeroizing;
 
 use crate::credentials::{Credential, CredentialRef};
 use crate::device::Device;
@@ -16,17 +17,20 @@ pub struct CredentialManagement<'a> {
     pub(crate) ptr: NonNull<ffi::fido_credman_metadata_t>,
 
     dev: &'a Device,
+
+    pin: Zeroizing<CString>,
 }
 
 impl<'a> CredentialManagement<'a> {
-    pub(crate) fn new(device: &Device) -> CredentialManagement {
-        unsafe {
-            let ptr = ffi::fido_credman_metadata_new();
-
-            CredentialManagement {
-                ptr: NonNull::new_unchecked(ptr),
-                dev: device,
-            }
+    pub(crate) fn new(
+        ptr: NonNull<ffi::fido_credman_metadata_t>,
+        device: &Device,
+        pin: Zeroizing<CString>,
+    ) -> CredentialManagement {
+        CredentialManagement {
+            ptr,
+            dev: device,
+            pin,
         }
     }
 
@@ -41,11 +45,8 @@ impl<'a> CredentialManagement<'a> {
     }
 
     /// Get information about relying parties with resident credentials in dev.
-    ///
-    /// A valid pin must be provided.
-    pub fn get_rp(&self, pin: &str) -> Result<IterRP<'a>> {
-        let pin = std::ffi::CString::new(pin)?;
-        let pin_ptr = pin.as_ptr();
+    pub fn get_rp(&self) -> Result<IterRP<'a>> {
+        let pin_ptr = self.pin.as_ptr();
 
         unsafe {
             let p = ffi::fido_credman_rp_new();
@@ -68,12 +69,9 @@ impl<'a> CredentialManagement<'a> {
     }
 
     /// Get resident credentials belonging to rp (relying parties) in dev.
-    ///
-    /// A valid pin must be provided.
-    pub fn get_rk<'i, I: Into<Cow<'i, CStr>>>(&self, rp: I, pin: &str) -> Result<CredManRK<'a>> {
+    pub fn get_rk<'i, I: Into<Cow<'i, CStr>>>(&self, rp: I) -> Result<CredManRK<'a>> {
         let rp = rp.into();
-        let pin = std::ffi::CString::new(pin)?;
-        let pin_ptr = pin.as_ptr();
+        let pin_ptr = self.pin.as_ptr();
 
         unsafe {
             let rk = ffi::fido_credman_rk_new();
@@ -97,9 +95,8 @@ impl<'a> CredentialManagement<'a> {
     ///
     /// # Arguments
     /// * `cred_id` - credential id
-    pub fn delete_rk(&self, cred_id: &[u8], pin: &str) -> Result<()> {
-        let pin = std::ffi::CString::new(pin)?;
-        let pin_ptr = pin.as_ptr();
+    pub fn delete_rk(&self, cred_id: &[u8]) -> Result<()> {
+        let pin_ptr = self.pin.as_ptr();
 
         unsafe {
             check(ffi::fido_credman_del_dev_rk(
@@ -120,9 +117,8 @@ impl<'a> CredentialManagement<'a> {
     /// See [Credential::set_id] and [Credential::set_user] for details.
     ///
     /// Only a credential's user attributes (name, display name) may be updated at this time.
-    pub fn set_rk(&self, cred: &Credential, pin: &str) -> Result<()> {
-        let pin = std::ffi::CString::new(pin)?;
-        let pin_ptr = pin.as_ptr();
+    pub fn set_rk(&self, cred: &Credential) -> Result<()> {
+        let pin_ptr = self.pin.as_ptr();
 
         unsafe {
             check(ffi::fido_credman_set_dev_rk(
