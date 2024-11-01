@@ -34,4 +34,4 @@ fn main() -> Result<()> {
 
 * [ ] more doc
 * [x] full bindings to `fido_cred_t` and `fido_assert_t`
-* [ ] credman api
+* [x] credman api
