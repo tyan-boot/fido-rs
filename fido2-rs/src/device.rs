@@ -384,7 +384,7 @@ impl Device {
     /// or an error happened, error will be returned.
     ///
     /// **Pin will be kept in memory and zeroized securely when the returned CredentialManagement is dropped.**
-    pub fn credman(&self, pin: &str) -> Result<CredentialManagement> {
+    pub fn credman(&self, pin: &str) -> Result<CredentialManagement<'_>> {
         if !self.supports_credman() {
             return Err(Error::Unsupported);
         }

@@ -25,7 +25,7 @@ impl ForeignType for Credential {
     type Ref = CredentialRef;
 
     unsafe fn from_ptr(ptr: *mut Self::CType) -> Self {
-        Credential(NonNull::new_unchecked(ptr))
+        unsafe { Credential(NonNull::new_unchecked(ptr)) }
     }
 
     fn as_ptr(&self) -> *mut Self::CType {

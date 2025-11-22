@@ -24,9 +24,9 @@ pub struct CredentialManagement<'a> {
 impl<'a> CredentialManagement<'a> {
     pub(crate) fn new(
         ptr: NonNull<ffi::fido_credman_metadata_t>,
-        device: &Device,
+        device: &'a Device,
         pin: Zeroizing<CString>,
-    ) -> CredentialManagement {
+    ) -> CredentialManagement<'a> {
         CredentialManagement {
             ptr,
             dev: device,

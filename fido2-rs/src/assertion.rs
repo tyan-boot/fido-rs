@@ -438,7 +438,7 @@ impl Assertions {
     }
 
     /// Return a iterator of contained assertion
-    pub fn iter(&self) -> impl Iterator<Item = Assertion> {
+    pub fn iter(&self) -> impl Iterator<Item = Assertion<'_>> {
         let count = self.count();
 
         AssertionIter {
