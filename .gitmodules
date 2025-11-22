@@ -1,0 +1,3 @@
+[submodule "libfido2-sys/libfido2"]
+	path = libfido2-sys/libfido2
+	url = https://github.com/Yubico/libfido2
