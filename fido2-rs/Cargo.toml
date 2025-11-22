@@ -7,7 +7,7 @@ description = "Rust bindings to Yubico fido2"
 repository = "https://github.com/tyan-boot/fido-rs"
 keywords = ["fido2", "webauthn"]
 categories = ["authentication", "api-bindings", "hardware-support"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 thiserror = "1.0.65"
@@ -19,3 +19,7 @@ zeroize = { version = "1.8.1", features = ["std"] }
 
 [dev-dependencies]
 anyhow = "1.0.91"
+
+[features]
+default = []
+vendored = ["libfido2-sys/vendored"]

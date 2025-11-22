@@ -7,25 +7,31 @@ description = "FFI bindings to Yubico fido2"
 repository = "https://github.com/tyan-boot/fido-rs"
 keywords = ["fido2", "webauthn"]
 categories = ["external-ffi-bindings"]
-edition = "2021"
+edition = "2024"
 links = "fido2"
 
 build = "build.rs"
 
 [dependencies]
+libz-sys = { version = "1.1", default-features = false }
+openssl-sys = { version = "0.9", default-features = false }
 
 [build-dependencies]
 anyhow = "1.0.91"
-ureq = { version = "2.10.1", default-features = false, features = ["tls"] }
-sha2 = "0.10.8"
-hex = "0.4.3"
 cfg-if = "1.0.0"
-cmake = "0.1.51"
-flate2 = "1.0.34"
-tar = "0.4.42"
+cmake = { version = "0.1.51", optional = true }
+bindgen = { version = "0.72", optional = true }
 
 [target.'cfg(target_env = "msvc")'.build-dependencies]
 vcpkg = "0.2.15"
 
 [target.'cfg(not(target_env = "msvc"))'.build-dependencies]
 pkg-config = "0.3.31"
+
+[features]
+default = []
+vendored = ["cmake", "bindgen"]
+nfc = []
+pcsc = []
+hidapi = []
+win-hello = []

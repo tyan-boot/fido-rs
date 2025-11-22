@@ -378,7 +378,7 @@ pub struct fido_credman_rp {
     _unused: [u8; 0],
 }
 pub type fido_credman_rp_t = fido_credman_rp;
-extern "C" {
+unsafe extern "C" {
     pub fn fido_strerr(arg1: ::std::os::raw::c_int) -> *const ::std::os::raw::c_char;
     pub fn fido_assert_new() -> *mut fido_assert_t;
     pub fn fido_cred_new() -> *mut fido_cred_t;
