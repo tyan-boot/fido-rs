@@ -1,6 +1,6 @@
 [package]
 name = "libfido2-sys"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["tyan boot <tyanboot@outlook.com>"]
 license = "MIT"
 description = "FFI bindings to Yubico fido2"
@@ -16,7 +16,6 @@ exclude = [
     "libfido2/.git/",
     "libfido2/.gitignore",
     "libfido2/.gitattributes",
-
     "libfido2/.github/",
     "libfido2/.actions/",
     "libfido2/fuzz/",
@@ -35,20 +34,21 @@ libz-sys = { version = "1.1", default-features = false }
 openssl-sys = { version = "0.9", default-features = false }
 
 [build-dependencies]
-anyhow = "1.0.91"
-cfg-if = "1.0.0"
-cmake = { version = "0.1.51", optional = true }
-bindgen = { version = "0.72", optional = true }
+anyhow = "1.0.100"
+cfg-if = "1.0.4"
+cmake = { version = "0.1.54", optional = true }
+bindgen = { version = "0.72" }
+regex = { version = "1", features = ["unicode-case"] }  # enable case-insensitive matching support
 
 [target.'cfg(target_env = "msvc")'.build-dependencies]
 vcpkg = "0.2.15"
 
 [target.'cfg(not(target_env = "msvc"))'.build-dependencies]
-pkg-config = "0.3.31"
+pkg-config = "0.3.32"
 
 [features]
 default = []
-vendored = ["cmake", "bindgen"]
+vendored = ["cmake"]
 nfc = []
 pcsc = []
 hidapi = []

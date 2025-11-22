@@ -8,6 +8,10 @@ pub fn source_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("libfido2")
 }
 
+pub fn manifest_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
 fn main() -> Result<()> {
     println!("cargo:rerun-if-env-changed=FIDO2_LIB_DIR");
 
@@ -24,7 +28,46 @@ fn main() -> Result<()> {
         println!("cargo:warning=Feature 'win-hello' has no effect without 'vendored' feature");
     }
 
-    // Priority 1: Use pre-built library if FIDO2_LIB_DIR is set
+    let include_dir = probe_libfido2()?;
+
+    generate_bindings(&include_dir)?;
+
+    Ok(())
+}
+
+/// Generate FFI bindings for libfido2 using bindgen
+fn generate_bindings(include_dir: &Path) -> Result<()> {
+    let bindings = bindgen::Builder::default()
+        .header(
+            manifest_path()
+                .join("fido2_wrapper.h")
+                .to_str()
+                .context("Invalid path")?,
+        )
+        .clang_arg(format!("-I{}", include_dir.display()))
+        .allowlist_item("(?i)^fido_.*")
+        .allowlist_item("(?i)^.*es256_pk.*")
+        .allowlist_item("(?i)^.*es384_pk.*")
+        .allowlist_item("(?i)^.*rs256_pk.*")
+        .allowlist_item("(?i)^.*eddsa_pk.*")
+        .allowlist_item("(?i)^ctap_.*")
+        .allowlist_item("(?i)^u2f_.*")
+        .allowlist_item("(?i)^cose_.*")
+        .merge_extern_blocks(true)
+        .default_macro_constant_type(bindgen::MacroTypeVariation::Signed)
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .generate()
+        .context("Failed to generate bindings")?;
+
+    let out_path = PathBuf::from(env::var("OUT_DIR").context("OUT_DIR not set")?);
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .context("Failed to write bindings")?;
+
+    Ok(())
+}
+
+fn probe_libfido2() -> Result<PathBuf> {
     if let Ok(dir) = env::var("FIDO2_LIB_DIR") {
         println!("cargo:rustc-link-search={}", dir);
         println!("cargo:rustc-link-lib=static=fido2");
@@ -50,10 +93,14 @@ fn main() -> Result<()> {
             }
         }
 
-        return Ok(());
+        // Assume include dir is in FIDO2_LIB_DIR/../include or check FIDO2_INCLUDE_DIR
+        let include_dir = env::var("FIDO2_INCLUDE_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(&dir).join("..").join("include"));
+
+        return Ok(include_dir);
     }
 
-    // Priority 2: Build from source if vendored feature is enabled
     #[cfg(feature = "vendored")]
     {
         if env::var("FIDO2_NO_VENDOR").map_or(true, |s| s == "0") {
@@ -61,10 +108,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // Priority 3: Find and link system-installed libfido2
-    find_pkg()?;
-
-    Ok(())
+    find_system_libfido2()
 }
 
 #[cfg(feature = "vendored")]
@@ -307,7 +351,7 @@ fn configure_crypto(config: &mut cmake::Config) -> Result<()> {
 }
 
 #[cfg(feature = "vendored")]
-fn build() -> Result<()> {
+fn build() -> Result<PathBuf> {
     let build_type = if cfg!(debug_assertions) {
         "Debug"
     } else {
@@ -385,24 +429,37 @@ fn build() -> Result<()> {
         }
     }
 
-    Ok(())
+    let include_dir = out.join("include");
+    Ok(include_dir)
 }
 
 #[cfg(not(target_env = "msvc"))]
-fn find_pkg() -> Result<()> {
-    let _lib = pkg_config::probe_library("libfido2").context("Could not find libfido2 package")?;
+fn find_system_libfido2() -> Result<PathBuf> {
+    let lib = pkg_config::probe_library("libfido2").context("Could not find libfido2 package")?;
 
-    Ok(())
+    let include_dir = lib
+        .include_paths
+        .first()
+        .context("No include paths found for libfido2")?
+        .clone();
+
+    Ok(include_dir)
 }
 
 #[cfg(all(windows, target_env = "msvc"))]
-fn find_pkg() -> Result<()> {
-    let _lib = vcpkg::find_package("libfido2").context("Could not find libfido2 package")?;
+fn find_system_libfido2() -> Result<PathBuf> {
+    let lib = vcpkg::find_package("libfido2").context("Could not find libfido2 package")?;
 
     println!("cargo:rustc-link-lib=hid");
     println!("cargo:rustc-link-lib=user32");
     println!("cargo:rustc-link-lib=setupapi");
     println!("cargo:rustc-link-lib=bcrypt");
 
-    Ok(())
+    let include_dir = lib
+        .include_paths
+        .first()
+        .context("No include paths found for libfido2")?
+        .clone();
+
+    Ok(include_dir)
 }
