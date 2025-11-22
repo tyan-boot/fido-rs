@@ -1,6 +1,6 @@
 use crate::credentials::{CoseType, Opt};
 use crate::error::{FidoError, Result};
-use crate::key::{Eddsa, Rsa, ES256, ES384};
+use crate::key::{ES256, ES384, Eddsa, Rsa};
 use crate::utils::check;
 use ffi::FIDO_ERR_INVALID_ARGUMENT;
 use openssl::nid::Nid;
