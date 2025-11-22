@@ -12,6 +12,24 @@ links = "fido2"
 
 build = "build.rs"
 
+exclude = [
+    "libfido2/.git/",
+    "libfido2/.gitignore",
+    "libfido2/.gitattributes",
+
+    "libfido2/.github/",
+    "libfido2/.actions/",
+    "libfido2/fuzz/",
+    "libfido2/regress/",
+    "libfido2/examples/",
+    "libfido2/tools/",
+    "libfido2/man/",
+    "libfido2/NEWS",
+    "libfido2/SECURITY.md",
+    "libfido2/windows/",
+    "libfido2/udev/",
+]
+
 [dependencies]
 libz-sys = { version = "1.1", default-features = false }
 openssl-sys = { version = "0.9", default-features = false }
