@@ -6,15 +6,17 @@
 //! Usage: cargo run --example largeblob
 
 use fido2_rs::credentials::{CoseType, Credential, Extensions, Opt};
-use fido2_rs::device::{Device, DeviceList};
+use fido2_rs::device::DeviceList;
 
 fn main() -> anyhow::Result<()> {
     let pin = "0000";
     let payload = b"Hello from fido2-rs largeBlob!";
 
     // Open first available device
-    let devices = DeviceList::list_devices(8);
-    let dev_info = devices.into_iter().next().expect("No FIDO2 device found");
+    // Note: devices must be kept alive (mut binding) across the .next() call,
+    // as DeviceInfo holds references into DeviceList's internal buffer.
+    let mut devices = DeviceList::list_devices(8);
+    let dev_info = devices.next().expect("No FIDO2 device found");
     let dev = dev_info.open()?;
 
     // Check max largeBlob capacity
@@ -51,8 +53,9 @@ fn main() -> anyhow::Result<()> {
 
     println!("Writing {} bytes...", payload.len());
     {
-        let devices = DeviceList::list_devices(8);
-        let dev_info = devices.into_iter().next().expect("No FIDO2 device found");
+        // Keep devices alive (mut binding) for the DeviceInfo reference.
+        let mut devices = DeviceList::list_devices(8);
+        let dev_info = devices.next().expect("No FIDO2 device found");
         let dev = dev_info.open()?;
         dev.largeblob_set(&blob_key, payload, pin)?;
         println!("Write OK");
@@ -61,8 +64,9 @@ fn main() -> anyhow::Result<()> {
 
     println!("Reading...");
     let data = {
-        let devices = DeviceList::list_devices(8);
-        let dev_info = devices.into_iter().next().expect("No FIDO2 device found");
+        // Keep devices alive (mut binding) for the DeviceInfo reference.
+        let mut devices = DeviceList::list_devices(8);
+        let dev_info = devices.next().expect("No FIDO2 device found");
         let dev = dev_info.open()?;
         let result = dev.largeblob_get(&blob_key)?;
         println!(
@@ -79,8 +83,9 @@ fn main() -> anyhow::Result<()> {
     // Clean up
     println!("Removing blob entry...");
     {
-        let devices = DeviceList::list_devices(8);
-        let dev_info = devices.into_iter().next().expect("No FIDO2 device found");
+        // Keep devices alive (mut binding) for the DeviceInfo reference.
+        let mut devices = DeviceList::list_devices(8);
+        let dev_info = devices.next().expect("No FIDO2 device found");
         let dev = dev_info.open()?;
         dev.largeblob_remove(&blob_key, pin)?;
         println!("Removed blob entry");
