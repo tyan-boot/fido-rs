@@ -21,6 +21,10 @@ libc = "0.2"
 [dev-dependencies]
 anyhow = "1.0.100"
 
+[[example]]
+name = "largeblob"
+path = "examples/largeblob.rs"
+
 [features]
 default = []
 vendored = ["libfido2-sys/vendored"]
