@@ -407,6 +407,184 @@ impl Device {
 
         Ok(credman)
     }
+
+    /// Set or change the FIDO2 device PIN.
+    ///
+    /// If `old_pin` is `None`, this sets the initial PIN on a device that has no
+    /// PIN configured yet. If `old_pin` is `Some(...)`, this changes the PIN from
+    /// `old_pin` to `new_pin`.
+    ///
+    /// **Please note that `fido_dev_set_pin()` is synchronous and will block if necessary.**
+    pub fn set_pin(&self, new_pin: &str, old_pin: Option<&str>) -> Result<()> {
+        let new_pin = CString::new(new_pin)?;
+        let old_pin = old_pin.map(CString::new).transpose()?;
+        let old_pin_ptr = match &old_pin {
+            Some(p) => p.as_ptr(),
+            None => std::ptr::null(),
+        };
+
+        unsafe {
+            check(ffi::fido_dev_set_pin(
+                self.ptr.as_ptr(),
+                new_pin.as_ptr(),
+                old_pin_ptr,
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    /// Perform a factory reset of the FIDO2 application on the device.
+    ///
+    /// This erases all FIDO2 credentials, the device PIN, and all largeBlob data.
+    /// Other applets (PIV, OpenPGP, etc.) are not affected.
+    ///
+    /// The CTAP2 specification requires the device to have been powered on within
+    /// approximately 10 seconds for a reset to succeed. If the device has been
+    /// connected for longer, it will return `FIDO_ERR_NOT_ALLOWED`.
+    ///
+    /// **Please note that `fido_dev_reset()` is synchronous and will block if necessary.**
+    pub fn reset(&self) -> Result<()> {
+        unsafe {
+            check(ffi::fido_dev_reset(self.ptr.as_ptr()))?;
+        }
+        Ok(())
+    }
+
+    /// Read a largeBlob entry from the device, decrypting it with the given key.
+    ///
+    /// The `key` is a 32-byte `largeBlobKey` obtained from a credential's
+    /// `large_blob_key()` (via `make_credential` or `get_assertion` with the
+    /// `LARGEBLOB_KEY` extension).
+    ///
+    /// Returns the decrypted data, or an error if no entry matches the key.
+    ///
+    /// No PIN is required for reads.
+    ///
+    /// **Please note that `fido_dev_largeblob_get()` is synchronous and will block if necessary.**
+    pub fn largeblob_get(&self, key: &[u8]) -> Result<Vec<u8>> {
+        let mut data_ptr: *mut u8 = std::ptr::null_mut();
+        let mut data_len: usize = 0;
+
+        unsafe {
+            check(ffi::fido_dev_largeblob_get(
+                self.ptr.as_ptr(),
+                key.as_ptr(),
+                key.len(),
+                &mut data_ptr,
+                &mut data_len,
+            ))?;
+
+            if data_ptr.is_null() {
+                return Ok(Vec::new());
+            }
+
+            let data = std::slice::from_raw_parts(data_ptr, data_len).to_vec();
+            libc::free(data_ptr as *mut libc::c_void);
+
+            Ok(data)
+        }
+    }
+
+    /// Store data as a largeBlob entry on the device, encrypted with the given key.
+    ///
+    /// The `key` is a 32-byte `largeBlobKey` obtained from a credential's
+    /// `large_blob_key()`. If an entry for this key already exists, it is
+    /// overwritten.
+    ///
+    /// PIN is required for write operations.
+    ///
+    /// **Please note that `fido_dev_largeblob_set()` is synchronous and will block if necessary.**
+    pub fn largeblob_set(&self, key: &[u8], data: &[u8], pin: &str) -> Result<()> {
+        let pin = CString::new(pin)?;
+
+        unsafe {
+            check(ffi::fido_dev_largeblob_set(
+                self.ptr.as_ptr(),
+                key.as_ptr(),
+                key.len(),
+                data.as_ptr(),
+                data.len(),
+                pin.as_ptr(),
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    /// Remove a largeBlob entry from the device.
+    ///
+    /// The `key` is a 32-byte `largeBlobKey` identifying the entry to remove.
+    ///
+    /// PIN is required for remove operations.
+    ///
+    /// **Please note that `fido_dev_largeblob_remove()` is synchronous and will block if necessary.**
+    pub fn largeblob_remove(&self, key: &[u8], pin: &str) -> Result<()> {
+        let pin = CString::new(pin)?;
+
+        unsafe {
+            check(ffi::fido_dev_largeblob_remove(
+                self.ptr.as_ptr(),
+                key.as_ptr(),
+                key.len(),
+                pin.as_ptr(),
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    /// Read the raw serialized largeBlob CBOR array from the device.
+    ///
+    /// Returns the full CBOR-encoded byte array. An empty device returns `[0x80]`
+    /// (the CBOR encoding of an empty array).
+    ///
+    /// No PIN is required for reads.
+    ///
+    /// **Please note that `fido_dev_largeblob_get_array()` is synchronous and will block if necessary.**
+    pub fn largeblob_get_array(&self) -> Result<Vec<u8>> {
+        let mut data_ptr: *mut u8 = std::ptr::null_mut();
+        let mut data_len: usize = 0;
+
+        unsafe {
+            check(ffi::fido_dev_largeblob_get_array(
+                self.ptr.as_ptr(),
+                &mut data_ptr,
+                &mut data_len,
+            ))?;
+
+            if data_ptr.is_null() {
+                return Ok(Vec::new());
+            }
+
+            let data = std::slice::from_raw_parts(data_ptr, data_len).to_vec();
+            libc::free(data_ptr as *mut libc::c_void);
+
+            Ok(data)
+        }
+    }
+
+    /// Replace the entire largeBlob CBOR array on the device.
+    ///
+    /// Pass `&[0x80]` (empty CBOR array) to erase all entries.
+    ///
+    /// PIN is required for write operations.
+    ///
+    /// **Please note that `fido_dev_largeblob_set_array()` is synchronous and will block if necessary.**
+    pub fn largeblob_set_array(&self, data: &[u8], pin: &str) -> Result<()> {
+        let pin = CString::new(pin)?;
+
+        unsafe {
+            check(ffi::fido_dev_largeblob_set_array(
+                self.ptr.as_ptr(),
+                data.as_ptr(),
+                data.len(),
+                pin.as_ptr(),
+            ))?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Drop for Device {
