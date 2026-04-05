@@ -89,7 +89,8 @@ impl<'a> ExactSizeIterator for DeviceList<'a> {
 impl<'a> Drop for DeviceList<'a> {
     fn drop(&mut self) {
         unsafe {
-            ffi::fido_dev_info_free(&mut self.ptr.as_ptr(), self.found);
+            let mut raw = self.ptr.as_ptr();
+            ffi::fido_dev_info_free(&mut raw, self.found);
         }
     }
 }
@@ -591,7 +592,8 @@ impl Drop for Device {
     fn drop(&mut self) {
         unsafe {
             let _ = ffi::fido_dev_close(self.ptr.as_ptr());
-            ffi::fido_dev_free(&mut self.ptr.as_ptr());
+            let mut raw = self.ptr.as_ptr();
+            ffi::fido_dev_free(&mut raw);
         }
     }
 }
