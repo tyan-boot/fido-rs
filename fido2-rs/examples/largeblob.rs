@@ -5,7 +5,6 @@
 //!
 //! Usage: cargo run --example largeblob
 
-use fido2_rs::assertion::AssertRequest;
 use fido2_rs::credentials::{CoseType, Credential, Extensions, Opt};
 use fido2_rs::device::{Device, DeviceList};
 
@@ -34,29 +33,58 @@ fn main() -> anyhow::Result<()> {
     println!("Creating credential (touch device)...");
     dev.make_credential(&mut cred, Some(pin))?;
 
+    // Extract and validate the largeBlobKey
     let blob_key = cred.large_blob_key().to_vec();
+    if blob_key.is_empty() {
+        anyhow::bail!(
+            "largeBlobKey missing from credential — \
+             device may not support the LARGEBLOB_KEY extension"
+        );
+    }
     println!("largeBlobKey: {} bytes", blob_key.len());
 
-    // Write data
-    println!("Writing {} bytes...", payload.len());
-    dev.largeblob_set(&blob_key, payload, pin)?;
-    println!("Write OK");
+    // Drop the device handle to release the HID session.
+    // libfido2 devices can only maintain one active HID connection at a time.
+    // After make_credential completes, we must close and re-open before
+    // calling largeblob operations.
+    drop(dev);
 
-    // Read data back
+    println!("Writing {} bytes...", payload.len());
+    {
+        let devices = DeviceList::list_devices(8);
+        let dev_info = devices.into_iter().next().expect("No FIDO2 device found");
+        let dev = dev_info.open()?;
+        dev.largeblob_set(&blob_key, payload, pin)?;
+        println!("Write OK");
+        drop(dev);
+    }
+
     println!("Reading...");
-    let data = dev.largeblob_get(&blob_key)?;
-    println!(
-        "Read {} bytes: {:?}",
-        data.len(),
-        String::from_utf8_lossy(&data)
-    );
+    let data = {
+        let devices = DeviceList::list_devices(8);
+        let dev_info = devices.into_iter().next().expect("No FIDO2 device found");
+        let dev = dev_info.open()?;
+        let result = dev.largeblob_get(&blob_key)?;
+        println!(
+            "Read {} bytes: {:?}",
+            result.len(),
+            String::from_utf8_lossy(&result)
+        );
+        result
+    };
 
     assert_eq!(&data, payload);
     println!("Round-trip verified!");
 
     // Clean up
-    dev.largeblob_remove(&blob_key, pin)?;
-    println!("Removed blob entry");
+    println!("Removing blob entry...");
+    {
+        let devices = DeviceList::list_devices(8);
+        let dev_info = devices.into_iter().next().expect("No FIDO2 device found");
+        let dev = dev_info.open()?;
+        dev.largeblob_remove(&blob_key, pin)?;
+        println!("Removed blob entry");
+    }
 
     Ok(())
 }
