@@ -16,9 +16,14 @@ libfido2-sys = { version = "0.5.0", path = "../libfido2-sys" }
 openssl = "0.10.75"
 foreign-types = "=0.3.1"
 zeroize = { version = "1.8.2", features = ["std"] }
+libc = "0.2"
 
 [dev-dependencies]
 anyhow = "1.0.100"
+
+[[example]]
+name = "largeblob"
+path = "examples/largeblob.rs"
 
 [features]
 default = []
