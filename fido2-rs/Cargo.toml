@@ -1,6 +1,6 @@
 [package]
 name = "fido2-rs"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["tyan boot <tyanboot@outlook.com>"]
 license = "MIT"
 description = "Rust bindings to Yubico fido2"
@@ -8,6 +8,10 @@ repository = "https://github.com/tyan-boot/fido-rs"
 keywords = ["fido2", "webauthn"]
 categories = ["authentication", "api-bindings", "hardware-support"]
 edition = "2024"
+
+[package.metadata.docs.rs]
+all-features = false
+features = ["vendored"]
 
 [dependencies]
 thiserror = "2"
