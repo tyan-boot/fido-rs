@@ -18,14 +18,14 @@ pub struct CredentialManagement<'a> {
 
     dev: &'a Device,
 
-    pin: Zeroizing<CString>,
+    pin: Option<Zeroizing<CString>>,
 }
 
 impl<'a> CredentialManagement<'a> {
     pub(crate) fn new(
         ptr: NonNull<ffi::fido_credman_metadata_t>,
         device: &'a Device,
-        pin: Zeroizing<CString>,
+        pin: Option<Zeroizing<CString>>,
     ) -> CredentialManagement<'a> {
         CredentialManagement {
             ptr,
@@ -46,7 +46,10 @@ impl<'a> CredentialManagement<'a> {
 
     /// Get information about relying parties with resident credentials in dev.
     pub fn get_rp(&self) -> Result<IterRP<'a>> {
-        let pin_ptr = self.pin.as_ptr();
+        let pin_ptr = match &self.pin {
+            Some(p) => p.as_ptr(),
+            None => std::ptr::null(),
+        };
 
         unsafe {
             let p = ffi::fido_credman_rp_new();
@@ -71,7 +74,10 @@ impl<'a> CredentialManagement<'a> {
     /// Get resident credentials belonging to rp (relying parties) in dev.
     pub fn get_rk<'i, I: Into<Cow<'i, CStr>>>(&self, rp: I) -> Result<CredManRK<'a>> {
         let rp = rp.into();
-        let pin_ptr = self.pin.as_ptr();
+        let pin_ptr = match &self.pin {
+            Some(p) => p.as_ptr(),
+            None => std::ptr::null(),
+        };
 
         unsafe {
             let rk = ffi::fido_credman_rk_new();
@@ -84,7 +90,7 @@ impl<'a> CredentialManagement<'a> {
 
             Ok(CredManRK {
                 ptr: NonNull::new_unchecked(rk),
-                _phantom: PhantomData::default(),
+                _phantom: PhantomData,
             })
         }
     }
@@ -96,7 +102,10 @@ impl<'a> CredentialManagement<'a> {
     /// # Arguments
     /// * `cred_id` - credential id
     pub fn delete_rk(&self, cred_id: &[u8]) -> Result<()> {
-        let pin_ptr = self.pin.as_ptr();
+        let pin_ptr = match &self.pin {
+            Some(p) => p.as_ptr(),
+            None => std::ptr::null(),
+        };
 
         unsafe {
             check(ffi::fido_credman_del_dev_rk(
@@ -118,7 +127,10 @@ impl<'a> CredentialManagement<'a> {
     ///
     /// Only a credential's user attributes (name, display name) may be updated at this time.
     pub fn set_rk(&self, cred: &Credential) -> Result<()> {
-        let pin_ptr = self.pin.as_ptr();
+        let pin_ptr = match &self.pin {
+            Some(p) => p.as_ptr(),
+            None => std::ptr::null(),
+        };
 
         unsafe {
             check(ffi::fido_credman_set_dev_rk(

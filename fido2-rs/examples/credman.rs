@@ -17,7 +17,7 @@ fn main() -> Result<()> {
             continue;
         }
 
-        let credman = dev.credman(PIN)?;
+        let credman = dev.credman(Some(PIN))?;
         println!("  cred count: {}", credman.count());
 
         for rp in credman.get_rp()? {

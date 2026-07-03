@@ -1,6 +1,6 @@
 [package]
 name = "fido2-rs"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["tyan boot <tyanboot@outlook.com>"]
 license = "MIT"
 description = "Rust bindings to Yubico fido2"
