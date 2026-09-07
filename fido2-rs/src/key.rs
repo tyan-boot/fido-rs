@@ -1,4 +1,5 @@
 use crate::error::FidoError;
+use crate::utils::allocation_error;
 use openssl::ec::EcKey;
 use openssl::pkey::{PKey, Public};
 use std::ptr::NonNull;
@@ -22,9 +23,15 @@ macro_rules! impl_key {
 
                 unsafe {
                     let pk = $new();
-                    crate::utils::check($from(pk, value.as_ptr() as _))?;
+                    let pk = NonNull::new(pk).ok_or_else(allocation_error)?;
 
-                    Ok($ty(NonNull::new_unchecked(pk)))
+                    if let Err(err) = crate::utils::check($from(pk.as_ptr(), value.as_ptr() as _)) {
+                        let mut raw = pk.as_ptr();
+                        $drop(&mut raw);
+                        return Err(err);
+                    }
+
+                    Ok($ty(pk))
                 }
             }
         })*

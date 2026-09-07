@@ -6,7 +6,7 @@ use bitflags::bitflags;
 use foreign_types::{ForeignType, ForeignTypeRef, Opaque};
 
 use crate::error::Result;
-use crate::utils::check;
+use crate::utils::{allocation_error, check, slice_or_empty};
 
 /// FIDO credential
 pub struct Credential(pub(crate) NonNull<ffi::fido_cred_t>);
@@ -15,7 +15,8 @@ impl Drop for Credential {
     fn drop(&mut self) {
         unsafe {
             // `fido_cred_free` set this ptr to `NULL`
-            ffi::fido_cred_free(&mut self.0.as_ptr());
+            let mut ptr = self.0.as_ptr();
+            ffi::fido_cred_free(&mut ptr);
         }
     }
 }
@@ -116,7 +117,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_authdata_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_authdata_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return raw authenticator data.
@@ -126,7 +127,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_authdata_raw_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_authdata_raw_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return client data hash
@@ -136,7 +137,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_clientdata_hash_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_clientdata_hash_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return credential ID
@@ -146,7 +147,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_id_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_id_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return authenticator attestation GUID
@@ -156,7 +157,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_aaguid_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_aaguid_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return "largeBlobKey".
@@ -166,7 +167,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_largeblob_key_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_largeblob_key_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return public key.
@@ -176,7 +177,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_pubkey_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_pubkey_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return signature.
@@ -186,7 +187,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_sig_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_sig_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return user ID.
@@ -196,7 +197,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_user_id_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_user_id_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return X509 certificate.
@@ -206,7 +207,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_x5c_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_x5c_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return attestation statement.
@@ -216,7 +217,7 @@ impl CredentialRef {
         let len = unsafe { ffi::fido_cred_attstmt_len(self.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_attstmt_ptr(self.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return the COSE algorithm of cred.
@@ -274,11 +275,12 @@ impl CredentialRef {
 impl Credential {
     /// Create a new credential
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         unsafe {
             let cred = ffi::fido_cred_new();
+            let cred = NonNull::new(cred).ok_or_else(allocation_error)?;
 
-            Credential(NonNull::new_unchecked(cred))
+            Ok(Credential(cred))
         }
     }
 

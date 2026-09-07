@@ -3,10 +3,10 @@ use crate::cbor::CBORInfo;
 use crate::credentials::Credential;
 use crate::credman::CredentialManagement;
 use crate::error::{Error, Result};
-use crate::utils::check;
+use crate::utils::{allocation_error, check, cstring_from_ptr_or_empty};
 use bitflags::bitflags;
 use ffi::fido_dev_t;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 use zeroize::Zeroizing;
@@ -16,36 +16,41 @@ use zeroize::Zeroizing;
 /// contain fido devices found by the underlying operating system.
 ///
 /// user can call [DeviceList::list_devices] to start enumerate fido devices.
-pub struct DeviceList<'a> {
+pub struct DeviceList {
     ptr: NonNull<ffi::fido_dev_info_t>,
     idx: usize,
     found: usize,
-    _p: PhantomData<&'a ()>,
+    capacity: usize,
 }
 
-impl<'a> DeviceList<'a> {
+impl DeviceList {
     /// Enumerate up to `max` fido devices found by the underlying operating system.
     ///
     /// Currently only USB HID devices are supported
-    pub fn list_devices(max: usize) -> DeviceList<'a> {
+    pub fn list_devices(max: usize) -> Result<DeviceList> {
         unsafe {
             let mut found = 0;
             let ptr = ffi::fido_dev_info_new(max);
+            let ptr = NonNull::new(ptr).ok_or_else(allocation_error)?;
 
-            ffi::fido_dev_info_manifest(ptr, max, &mut found);
+            if let Err(err) = check(ffi::fido_dev_info_manifest(ptr.as_ptr(), max, &mut found)) {
+                let mut raw = ptr.as_ptr();
+                ffi::fido_dev_info_free(&mut raw, max);
+                return Err(err.into());
+            }
 
-            DeviceList {
-                ptr: NonNull::new_unchecked(ptr),
+            Ok(DeviceList {
+                ptr,
                 idx: 0,
                 found,
-                _p: PhantomData,
-            }
+                capacity: max,
+            })
         }
     }
 }
 
-impl<'a> Iterator for DeviceList<'a> {
-    type Item = DeviceInfo<'a>;
+impl Iterator for DeviceList {
+    type Item = DeviceInfo;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.idx >= self.found {
@@ -57,16 +62,16 @@ impl<'a> Iterator for DeviceList<'a> {
             let info = ffi::fido_dev_info_ptr(ptr, self.idx);
 
             let path = ffi::fido_dev_info_path(info);
-            let path = CStr::from_ptr(path);
+            let path = cstring_from_ptr_or_empty(path);
 
             let product_id = ffi::fido_dev_info_product(info);
             let vendor_id = ffi::fido_dev_info_vendor(info);
 
             let manufacturer = ffi::fido_dev_info_manufacturer_string(info);
-            let manufacturer = CStr::from_ptr(manufacturer);
+            let manufacturer = cstring_from_ptr_or_empty(manufacturer);
 
             let product = ffi::fido_dev_info_product_string(info);
-            let product = CStr::from_ptr(product);
+            let product = cstring_from_ptr_or_empty(product);
             self.idx += 1;
 
             Some(DeviceInfo {
@@ -80,39 +85,43 @@ impl<'a> Iterator for DeviceList<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for DeviceList<'a> {
+impl ExactSizeIterator for DeviceList {
     fn len(&self) -> usize {
-        self.found
+        self.found - self.idx
     }
 }
 
-impl<'a> Drop for DeviceList<'a> {
+impl Drop for DeviceList {
     fn drop(&mut self) {
         unsafe {
             let mut raw = self.ptr.as_ptr();
-            ffi::fido_dev_info_free(&mut raw, self.found);
+            ffi::fido_dev_info_free(&mut raw, self.capacity);
         }
     }
 }
 
 /// Device info obtained from [DeviceList]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DeviceInfo<'a> {
-    pub path: &'a CStr,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeviceInfo {
+    pub path: CString,
     pub product_id: i16,
     pub vendor_id: i16,
-    pub manufacturer: &'a CStr,
-    pub product: &'a CStr,
+    pub manufacturer: CString,
+    pub product: CString,
 }
 
-impl<'a> DeviceInfo<'a> {
+impl DeviceInfo {
     /// Open the device specified by this [DeviceInfo]
     pub fn open(&self) -> Result<Device> {
         unsafe {
             let ptr = ffi::fido_dev_new();
-            check(ffi::fido_dev_open(ptr, self.path.as_ptr()))?;
+            let ptr = NonNull::new(ptr).ok_or_else(allocation_error)?;
 
-            let ptr = NonNull::new_unchecked(ptr);
+            if let Err(err) = check(ffi::fido_dev_open(ptr.as_ptr(), self.path.as_ptr())) {
+                let mut raw = ptr.as_ptr();
+                ffi::fido_dev_free(&mut raw);
+                return Err(err.into());
+            }
 
             Ok(Device { ptr })
         }
@@ -121,15 +130,18 @@ impl<'a> DeviceInfo<'a> {
 
 /// A cancel handle to device, used to cancel a pending requests.
 ///
-/// This handle can be copy/clone.
+/// This handle can be copy/clone and cannot outlive the device it cancels.
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub struct DeviceCancel(NonNull<fido_dev_t>);
+pub struct DeviceCancel<'a> {
+    ptr: NonNull<fido_dev_t>,
+    _p: PhantomData<&'a Device>,
+}
 
-impl DeviceCancel {
+impl DeviceCancel<'_> {
     /// Cancel any pending requests on device.
     pub fn cancel(&self) {
         unsafe {
-            ffi::fido_dev_cancel(self.0.as_ptr());
+            ffi::fido_dev_cancel(self.ptr.as_ptr());
         }
     }
 }
@@ -149,29 +161,34 @@ impl Device {
         let path = CString::new(path.as_ref())?;
         unsafe {
             let dev = ffi::fido_dev_new();
-            assert!(!dev.is_null());
+            let dev = NonNull::new(dev).ok_or_else(allocation_error)?;
 
-            check(ffi::fido_dev_open(dev, path.as_ptr()))?;
+            if let Err(err) = check(ffi::fido_dev_open(dev.as_ptr(), path.as_ptr())) {
+                let mut raw = dev.as_ptr();
+                ffi::fido_dev_free(&mut raw);
+                return Err(err.into());
+            }
 
-            Ok(Device {
-                ptr: NonNull::new_unchecked(dev),
-            })
+            Ok(Device { ptr: dev })
         }
     }
 
     /// Get a handle of this device for cancel.
-    pub fn cancel_handle(&self) -> DeviceCancel {
-        DeviceCancel(self.ptr)
+    pub fn cancel_handle(&self) -> DeviceCancel<'_> {
+        DeviceCancel {
+            ptr: self.ptr,
+            _p: PhantomData,
+        }
     }
 
-    /// can be used to force CTAP2 communication with dev
+    /// Can be used to force CTAP1 (U2F) communication with dev.
     pub fn force_u2f(&self) {
         unsafe {
             ffi::fido_dev_force_u2f(self.ptr.as_ptr());
         }
     }
 
-    /// Can be used to force CTAP1 (U2F) communication with dev
+    /// Can be used to force CTAP2 communication with dev.
     pub fn force_fido2(&self) {
         unsafe {
             ffi::fido_dev_force_fido2(self.ptr.as_ptr());
@@ -245,7 +262,7 @@ impl Device {
 
     /// Return device info.
     pub fn info(&self) -> Result<CBORInfo> {
-        let info = CBORInfo::new();
+        let info = CBORInfo::new()?;
 
         unsafe {
             check(ffi::fido_dev_get_cbor_info(
@@ -301,7 +318,7 @@ impl Device {
     ///
     /// fn main() -> anyhow::Result<()> {
     ///     let dev = Device::open("windows://hello").expect("unable open device");
-    ///     let mut cred = Credential::new();
+    ///     let mut cred = Credential::new()?;
     ///     cred.set_client_data(&[1, 2, 3, 4, 5, 6])?;
     ///     cred.set_rp("fido_rs", "fido example")?;
     ///     cred.set_user(&[1, 2, 3, 4, 5, 6], "alice", Some("alice"), None)?;
@@ -351,7 +368,7 @@ impl Device {
     ///
     /// fn main() -> anyhow::Result<()> {
     ///     let dev = Device::open("windows://hello")?;
-    ///     let mut request = AssertRequest::new();    ///
+    ///     let mut request = AssertRequest::new()?;
     ///
     ///     request.set_rp("fido_rs")?;
     ///     request.set_client_data(&[1, 2, 3, 4, 5, 6])?;
@@ -393,23 +410,27 @@ impl Device {
             return Err(Error::Unsupported);
         }
 
-        let ptr = unsafe { ffi::fido_credman_metadata_new() };
-
         let pin = pin.map(CString::new).transpose()?;
         let pin_ptr = match &pin {
             Some(pin) => pin.as_ptr(),
             None => std::ptr::null(),
         };
 
+        let ptr = unsafe { ffi::fido_credman_metadata_new() };
+        let ptr = NonNull::new(ptr).ok_or_else(allocation_error)?;
+
         unsafe {
-            check(ffi::fido_credman_get_dev_metadata(
+            if let Err(err) = check(ffi::fido_credman_get_dev_metadata(
                 self.ptr.as_ptr(),
-                ptr,
+                ptr.as_ptr(),
                 pin_ptr,
-            ))?;
+            )) {
+                let mut raw = ptr.as_ptr();
+                ffi::fido_credman_metadata_free(&mut raw);
+                return Err(err.into());
+            }
         }
 
-        let ptr = unsafe { NonNull::new_unchecked(ptr) };
         let credman = CredentialManagement::new(ptr, self, pin.map(Zeroizing::new));
 
         Ok(credman)

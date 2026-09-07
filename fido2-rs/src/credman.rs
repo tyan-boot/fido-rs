@@ -10,7 +10,7 @@ use zeroize::Zeroizing;
 use crate::credentials::{Credential, CredentialRef};
 use crate::device::Device;
 use crate::error::Result;
-use crate::utils::check;
+use crate::utils::{allocation_error, check};
 
 /// FIDO2 credential management.
 pub struct CredentialManagement<'a> {
@@ -45,7 +45,7 @@ impl<'a> CredentialManagement<'a> {
     }
 
     /// Get information about relying parties with resident credentials in dev.
-    pub fn get_rp(&self) -> Result<IterRP<'a>> {
+    pub fn get_rp(&self) -> Result<CredManRP> {
         let pin_ptr = match &self.pin {
             Some(p) => p.as_ptr(),
             None => std::ptr::null(),
@@ -53,26 +53,27 @@ impl<'a> CredentialManagement<'a> {
 
         unsafe {
             let p = ffi::fido_credman_rp_new();
+            let p = NonNull::new(p).ok_or_else(allocation_error)?;
 
-            check(ffi::fido_credman_get_dev_rp(
+            if let Err(err) = check(ffi::fido_credman_get_dev_rp(
                 self.dev.ptr.as_ptr(),
-                p,
+                p.as_ptr(),
                 pin_ptr,
-            ))?;
+            )) {
+                let mut raw = p.as_ptr();
+                ffi::fido_credman_rp_free(&mut raw);
+                return Err(err.into());
+            }
 
-            let total = ffi::fido_credman_rp_count(p);
-
-            Ok(IterRP {
-                idx: 0,
-                total,
-                rp: NonNull::new_unchecked(p),
+            Ok(CredManRP {
+                ptr: p,
                 _phantom: Default::default(),
             })
         }
     }
 
     /// Get resident credentials belonging to rp (relying parties) in dev.
-    pub fn get_rk<'i, I: Into<Cow<'i, CStr>>>(&self, rp: I) -> Result<CredManRK<'a>> {
+    pub fn get_rk<'i, I: Into<Cow<'i, CStr>>>(&self, rp: I) -> Result<CredManRK> {
         let rp = rp.into();
         let pin_ptr = match &self.pin {
             Some(p) => p.as_ptr(),
@@ -81,15 +82,21 @@ impl<'a> CredentialManagement<'a> {
 
         unsafe {
             let rk = ffi::fido_credman_rk_new();
-            check(ffi::fido_credman_get_dev_rk(
+            let rk = NonNull::new(rk).ok_or_else(allocation_error)?;
+
+            if let Err(err) = check(ffi::fido_credman_get_dev_rk(
                 self.dev.ptr.as_ptr(),
                 rp.as_ptr(),
-                rk,
+                rk.as_ptr(),
                 pin_ptr,
-            ))?;
+            )) {
+                let mut raw = rk.as_ptr();
+                ffi::fido_credman_rk_free(&mut raw);
+                return Err(err.into());
+            }
 
             Ok(CredManRK {
-                ptr: NonNull::new_unchecked(rk),
+                ptr: rk,
                 _phantom: PhantomData,
             })
         }
@@ -147,25 +154,26 @@ impl<'a> CredentialManagement<'a> {
 impl<'a> Drop for CredentialManagement<'a> {
     fn drop(&mut self) {
         unsafe {
-            ffi::fido_credman_metadata_free(&mut self.ptr.as_ptr());
+            let mut ptr = self.ptr.as_ptr();
+            ffi::fido_credman_metadata_free(&mut ptr);
         }
     }
 }
 
 /// Abstracts the set of resident credentials belonging to a given relying party.
-pub struct CredManRK<'a> {
+pub struct CredManRK {
     ptr: NonNull<ffi::fido_credman_rk_t>,
-    _phantom: PhantomData<&'a ()>,
+    _phantom: PhantomData<ffi::fido_credman_rk_t>,
 }
 
-impl<'a> CredManRK<'a> {
+impl CredManRK {
     /// Returns the number of resident credentials in rk
     pub fn count(&self) -> usize {
         unsafe { ffi::fido_credman_rk_count(self.ptr.as_ptr()) }
     }
 
     /// Return an iterator over the resident credentials
-    pub fn iter(&self) -> IterRK<'a> {
+    pub fn iter(&self) -> IterRK<'_> {
         let total = self.count();
 
         IterRK {
@@ -177,12 +185,24 @@ impl<'a> CredManRK<'a> {
     }
 }
 
-impl<'a> Index<usize> for CredManRK<'a> {
+impl Drop for CredManRK {
+    fn drop(&mut self) {
+        unsafe {
+            let mut ptr = self.ptr.as_ptr();
+            ffi::fido_credman_rk_free(&mut ptr);
+        }
+    }
+}
+
+impl Index<usize> for CredManRK {
     type Output = CredentialRef;
 
-    fn index(&self, index: usize) -> &'a Self::Output {
+    fn index(&self, index: usize) -> &Self::Output {
+        assert!(index < self.count(), "credential index out of bounds");
+
         unsafe {
             let ptr = ffi::fido_credman_rk(self.ptr.as_ptr(), index);
+            assert!(!ptr.is_null(), "libfido2 returned NULL for credential");
 
             // todo: how to prevent mut
             CredentialRef::from_ptr(ptr as *mut ffi::fido_cred_t)
@@ -195,7 +215,7 @@ pub struct IterRK<'a> {
     idx: usize,
     total: usize,
     rk: NonNull<ffi::fido_credman_rk_t>,
-    _phantom: PhantomData<&'a ()>,
+    _phantom: PhantomData<&'a CredManRK>,
 }
 
 impl<'a> Iterator for IterRK<'a> {
@@ -207,6 +227,7 @@ impl<'a> Iterator for IterRK<'a> {
         }
 
         let ptr = unsafe { ffi::fido_credman_rk(self.rk.as_ptr(), self.idx) };
+        assert!(!ptr.is_null(), "libfido2 returned NULL for credential");
 
         self.idx += 1;
 
@@ -229,19 +250,19 @@ pub struct RelyingParty<'a> {
 }
 
 /// Abstracts information about a relying party.
-pub struct CredManRP<'a> {
+pub struct CredManRP {
     ptr: NonNull<ffi::fido_credman_rp_t>,
-    _phantom: PhantomData<&'a ()>,
+    _phantom: PhantomData<ffi::fido_credman_rp_t>,
 }
 
-impl<'a> CredManRP<'a> {
+impl CredManRP {
     /// Returns the number of relying parties in rp
     pub fn count(&self) -> usize {
         unsafe { ffi::fido_credman_rp_count(self.ptr.as_ptr()) }
     }
 
     /// Return an iterator over the relying parties
-    pub fn iter(&self) -> IterRP<'a> {
+    pub fn iter(&self) -> IterRP<'_> {
         let total = self.count();
 
         IterRP {
@@ -253,12 +274,21 @@ impl<'a> CredManRP<'a> {
     }
 }
 
+impl Drop for CredManRP {
+    fn drop(&mut self) {
+        unsafe {
+            let mut ptr = self.ptr.as_ptr();
+            ffi::fido_credman_rp_free(&mut ptr);
+        }
+    }
+}
+
 /// Iterator over relying parties.
 pub struct IterRP<'a> {
     idx: usize,
     total: usize,
     rp: NonNull<ffi::fido_credman_rp_t>,
-    _phantom: PhantomData<&'a ()>,
+    _phantom: PhantomData<&'a CredManRP>,
 }
 
 impl<'a> Iterator for IterRP<'a> {
@@ -271,6 +301,7 @@ impl<'a> Iterator for IterRP<'a> {
 
         let id = unsafe {
             let id = ffi::fido_credman_rp_id(self.rp.as_ptr(), self.idx);
+            assert!(!id.is_null(), "libfido2 returned NULL for relying party id");
 
             CStr::from_ptr(id)
         };

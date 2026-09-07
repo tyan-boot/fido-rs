@@ -5,7 +5,7 @@ use anyhow::Result;
 const PIN: &str = "123456";
 
 fn main() -> Result<()> {
-    let dev_list = DeviceList::list_devices(16);
+    let dev_list = DeviceList::list_devices(16)?;
     for dev_info in dev_list {
         println!("device path: {}", dev_info.path.to_str()?);
         println!("manufacturer: {}", dev_info.manufacturer.to_str()?);
@@ -20,7 +20,8 @@ fn main() -> Result<()> {
         let credman = dev.credman(Some(PIN))?;
         println!("  cred count: {}", credman.count());
 
-        for rp in credman.get_rp()? {
+        let rp_list = credman.get_rp()?;
+        for rp in rp_list.iter() {
             println!("  rp: {:?}", rp);
             let rk = credman.get_rk(rp.id)?;
 

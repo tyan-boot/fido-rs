@@ -15,7 +15,7 @@ use fido2_rs::error::Error;
 const PIN: &str = "1234";
 
 fn main() -> anyhow::Result<()> {
-    let mut devices = DeviceList::list_devices(8);
+    let mut devices = DeviceList::list_devices(8)?;
     let dev_info = devices.next().expect("No FIDO2 device found");
     let dev = dev_info.open()?;
 

@@ -1,7 +1,7 @@
 use crate::credentials::{CoseType, Opt};
 use crate::error::{FidoError, Result};
 use crate::key::{ES256, ES384, Eddsa, Rsa};
-use crate::utils::check;
+use crate::utils::{allocation_error, check, slice_or_empty};
 use ffi::FIDO_ERR_INVALID_ARGUMENT;
 use openssl::nid::Nid;
 use openssl::pkey::{Id, PKey, Public};
@@ -134,13 +134,12 @@ impl_assertion_set!(AssertRequest, 0.ptr);
 impl AssertRequest {
     /// Return a [AssertRequest]
     #[allow(clippy::new_without_default)]
-    pub fn new() -> AssertRequest {
+    pub fn new() -> Result<AssertRequest> {
         unsafe {
             let assert = ffi::fido_assert_new();
+            let assert = NonNull::new(assert).ok_or_else(allocation_error)?;
 
-            AssertRequest(Assertions {
-                ptr: NonNull::new_unchecked(assert),
-            })
+            Ok(AssertRequest(Assertions { ptr: assert }))
         }
     }
 
@@ -165,14 +164,18 @@ impl_assertion_set!(AssertVerifier, 0.ptr);
 impl AssertVerifier {
     /// Return a [AssertVerifier] for verify.
     #[allow(clippy::new_without_default)]
-    pub fn new() -> AssertVerifier {
+    pub fn new() -> Result<AssertVerifier> {
         unsafe {
             let assert = ffi::fido_assert_new();
-            ffi::fido_assert_set_count(assert, 1);
+            let assert = NonNull::new(assert).ok_or_else(allocation_error)?;
 
-            AssertVerifier(Assertions {
-                ptr: NonNull::new_unchecked(assert),
-            })
+            if let Err(err) = check(ffi::fido_assert_set_count(assert.as_ptr(), 1)) {
+                let mut raw = assert.as_ptr();
+                ffi::fido_assert_free(&mut raw);
+                return Err(err.into());
+            }
+
+            Ok(AssertVerifier(Assertions { ptr: assert }))
         }
     }
 
@@ -261,7 +264,7 @@ impl AssertVerifier {
                     check(ffi::fido_assert_verify(
                         self.0.ptr.as_ptr(),
                         0,
-                        CoseType::EDDSA as i32,
+                        CoseType::RS256 as i32,
                         pk.as_ptr().cast(),
                     ))?;
                 }
@@ -357,7 +360,7 @@ impl Assertion<'_> {
         let len = unsafe { ffi::fido_assert_authdata_len(self.ptr.as_ptr(), self.idx) };
         let ptr = unsafe { ffi::fido_assert_authdata_ptr(self.ptr.as_ptr(), self.idx) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return client data hash.
@@ -365,7 +368,7 @@ impl Assertion<'_> {
         let len = unsafe { ffi::fido_assert_clientdata_hash_len(self.ptr.as_ptr()) };
         let ptr = unsafe { ffi::fido_assert_clientdata_hash_ptr(self.ptr.as_ptr()) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return the credBlob attribute.
@@ -373,7 +376,7 @@ impl Assertion<'_> {
         let len = unsafe { ffi::fido_assert_blob_len(self.ptr.as_ptr(), self.idx) };
         let ptr = unsafe { ffi::fido_assert_blob_ptr(self.ptr.as_ptr(), self.idx) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return the hmac-secret attribute.
@@ -385,7 +388,7 @@ impl Assertion<'_> {
         let len = unsafe { ffi::fido_assert_hmac_secret_len(self.ptr.as_ptr(), self.idx) };
         let ptr = unsafe { ffi::fido_assert_hmac_secret_ptr(self.ptr.as_ptr(), self.idx) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return largeBlobKey attribute.
@@ -393,7 +396,7 @@ impl Assertion<'_> {
         let len = unsafe { ffi::fido_assert_largeblob_key_len(self.ptr.as_ptr(), self.idx) };
         let ptr = unsafe { ffi::fido_assert_largeblob_key_ptr(self.ptr.as_ptr(), self.idx) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return user ID.
@@ -401,7 +404,7 @@ impl Assertion<'_> {
         let len = unsafe { ffi::fido_assert_user_id_len(self.ptr.as_ptr(), self.idx) };
         let ptr = unsafe { ffi::fido_assert_user_id_ptr(self.ptr.as_ptr(), self.idx) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return signature
@@ -409,7 +412,7 @@ impl Assertion<'_> {
         let len = unsafe { ffi::fido_assert_sig_len(self.ptr.as_ptr(), self.idx) };
         let ptr = unsafe { ffi::fido_assert_sig_ptr(self.ptr.as_ptr(), self.idx) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return credential ID
@@ -417,7 +420,7 @@ impl Assertion<'_> {
         let len = unsafe { ffi::fido_assert_id_len(self.ptr.as_ptr(), self.idx) };
         let ptr = unsafe { ffi::fido_assert_id_ptr(self.ptr.as_ptr(), self.idx) };
 
-        unsafe { std::slice::from_raw_parts(ptr, len) }
+        unsafe { slice_or_empty(ptr, len) }
     }
 
     /// Return signature count.

@@ -38,7 +38,7 @@
 //! ```rust,no_run
 //! use fido2_rs::device::DeviceList;
 //!
-//! let list = DeviceList::list_devices(4);
+//! let list = DeviceList::list_devices(4).expect("unable to list devices");
 //! for dev in list {
 //!     println!("{:?}", dev.path);
 //! }
@@ -54,7 +54,7 @@
 //! fn main() -> Result<()> {
 //!     let dev = Device::open("windows://hello").expect("unable open windows hello");
 //!  
-//!     let mut cred = Credential::new();
+//!     let mut cred = Credential::new()?;
 //!     cred.set_client_data(&[1, 2, 3, 4, 5, 6])?;
 //!     cred.set_rp("fido_rs", "fido example")?;
 //!     cred.set_user(&[1, 2, 3, 4, 5, 6], "alice", Some("alice"), None)?;

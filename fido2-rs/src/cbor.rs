@@ -2,16 +2,19 @@ use std::collections::HashMap;
 use std::ffi::CStr;
 use std::ptr::NonNull;
 
+use crate::error::Result;
+use crate::utils::{allocation_error, slice_or_empty};
+
 pub struct CBORInfo {
     pub(crate) ptr: NonNull<ffi::fido_cbor_info_t>,
 }
 
 impl CBORInfo {
-    pub(crate) fn new() -> CBORInfo {
+    pub(crate) fn new() -> Result<CBORInfo> {
         unsafe {
-            CBORInfo {
-                ptr: NonNull::new_unchecked(ffi::fido_cbor_info_new()),
-            }
+            let ptr = ffi::fido_cbor_info_new();
+            let ptr = NonNull::new(ptr).ok_or_else(allocation_error)?;
+            Ok(CBORInfo { ptr })
         }
     }
 
@@ -20,7 +23,7 @@ impl CBORInfo {
             let len = ffi::fido_cbor_info_aaguid_len(self.ptr.as_ptr());
             let ptr = ffi::fido_cbor_info_aaguid_ptr(self.ptr.as_ptr());
 
-            std::slice::from_raw_parts(ptr, len)
+            slice_or_empty(ptr, len)
         }
     }
 
@@ -29,7 +32,7 @@ impl CBORInfo {
             let len = ffi::fido_cbor_info_extensions_len(self.ptr.as_ptr());
             let ptr = ffi::fido_cbor_info_extensions_ptr(self.ptr.as_ptr());
 
-            let exts = std::slice::from_raw_parts(ptr, len);
+            let exts = slice_or_empty(ptr, len);
 
             exts.iter()
                 .map(|it| CStr::from_ptr(*it))
@@ -43,7 +46,7 @@ impl CBORInfo {
             let len = ffi::fido_cbor_info_protocols_len(self.ptr.as_ptr());
             let ptr = ffi::fido_cbor_info_protocols_ptr(self.ptr.as_ptr());
 
-            std::slice::from_raw_parts(ptr, len)
+            slice_or_empty(ptr, len)
         }
     }
 
@@ -52,7 +55,7 @@ impl CBORInfo {
             let len = ffi::fido_cbor_info_transports_len(self.ptr.as_ptr());
             let ptr = ffi::fido_cbor_info_transports_ptr(self.ptr.as_ptr());
 
-            let txs = std::slice::from_raw_parts(ptr, len);
+            let txs = slice_or_empty(ptr, len);
 
             txs.iter()
                 .map(|it| CStr::from_ptr(*it))
@@ -66,7 +69,7 @@ impl CBORInfo {
             let len = ffi::fido_cbor_info_versions_len(self.ptr.as_ptr());
             let ptr = ffi::fido_cbor_info_versions_ptr(self.ptr.as_ptr());
 
-            let versions = std::slice::from_raw_parts(ptr, len);
+            let versions = slice_or_empty(ptr, len);
 
             versions
                 .iter()
@@ -82,8 +85,8 @@ impl CBORInfo {
             let names = ffi::fido_cbor_info_options_name_ptr(self.ptr.as_ptr());
             let values = ffi::fido_cbor_info_options_value_ptr(self.ptr.as_ptr());
 
-            let names = std::slice::from_raw_parts(names, len);
-            let values = std::slice::from_raw_parts(values, len);
+            let names = slice_or_empty(names, len);
+            let values = slice_or_empty(values, len);
 
             names
                 .iter()
@@ -121,8 +124,8 @@ impl CBORInfo {
             let names = ffi::fido_cbor_info_certs_name_ptr(self.ptr.as_ptr());
             let values = ffi::fido_cbor_info_certs_value_ptr(self.ptr.as_ptr());
 
-            let names = std::slice::from_raw_parts(names, len);
-            let values = std::slice::from_raw_parts(values, len);
+            let names = slice_or_empty(names, len);
+            let values = slice_or_empty(values, len);
 
             names
                 .iter()

@@ -12,10 +12,8 @@ fn main() -> anyhow::Result<()> {
     let pin = "0000";
     let payload = b"Hello from fido2-rs largeBlob!";
 
-    // Open first available device
-    // Note: devices must be kept alive (mut binding) across the .next() call,
-    // as DeviceInfo holds references into DeviceList's internal buffer.
-    let mut devices = DeviceList::list_devices(8);
+    // Open first available device.
+    let mut devices = DeviceList::list_devices(8)?;
     let dev_info = devices.next().expect("No FIDO2 device found");
     let dev = dev_info.open()?;
 
@@ -24,7 +22,7 @@ fn main() -> anyhow::Result<()> {
     println!("maxlargeblob: {} bytes", info.max_large_blob());
 
     // Create a resident credential with largeBlobKey extension
-    let mut cred = Credential::new();
+    let mut cred = Credential::new()?;
     cred.set_client_data([0u8; 32])?;
     cred.set_rp("fido2-rs.example", "largeBlob example")?;
     cred.set_user([1, 2, 3, 4], "test", Some("Test User"), None)?;
@@ -53,8 +51,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("Writing {} bytes...", payload.len());
     {
-        // Keep devices alive (mut binding) for the DeviceInfo reference.
-        let mut devices = DeviceList::list_devices(8);
+        let mut devices = DeviceList::list_devices(8)?;
         let dev_info = devices.next().expect("No FIDO2 device found");
         let dev = dev_info.open()?;
         dev.largeblob_set(&blob_key, payload, pin)?;
@@ -64,8 +61,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("Reading...");
     let data = {
-        // Keep devices alive (mut binding) for the DeviceInfo reference.
-        let mut devices = DeviceList::list_devices(8);
+        let mut devices = DeviceList::list_devices(8)?;
         let dev_info = devices.next().expect("No FIDO2 device found");
         let dev = dev_info.open()?;
         let result = dev.largeblob_get(&blob_key)?;
@@ -83,8 +79,7 @@ fn main() -> anyhow::Result<()> {
     // Clean up
     println!("Removing blob entry...");
     {
-        // Keep devices alive (mut binding) for the DeviceInfo reference.
-        let mut devices = DeviceList::list_devices(8);
+        let mut devices = DeviceList::list_devices(8)?;
         let dev_info = devices.next().expect("No FIDO2 device found");
         let dev = dev_info.open()?;
         dev.largeblob_remove(&blob_key, pin)?;
